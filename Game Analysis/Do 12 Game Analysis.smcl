@@ -1,0 +1,374 @@
+{smcl}
+{com}{sf}{ul off}{txt}{.-}
+      name:  {res}<unnamed>
+       {txt}log:  {res}C:/Users/Owner/OneDrive/Documents/Georgetown University/Thesis Writer/Research/QB Worth/Game Analysis/Do 12 Game Analysis.smcl
+  {txt}log type:  {res}smcl
+ {txt}opened on:  {res}24 Aug 2025, 13:58:45
+{txt}
+{com}. clear all
+{res}{txt}
+{com}. scalar t1 = c(current_time)
+{txt}
+{com}. use "C:/Users/Owner/OneDrive/Documents/Georgetown University/Thesis Writer/Research/QB Worth/Game Analysis/Data 23 Final Dataset.dta"
+{txt}
+{com}. 
+. foreach x in Rate ANYA TANYA FPA {c -(}
+{txt}  2{com}.         foreach y in Game Season {c -(}
+{txt}  3{com}.                 * Logit Regressions with Game and Season Variables
+.                 quietly logit Win Diff`y'`x' DiffNonQBFantPt DiffHome DiffRestDays DifflogIM DiffSGini DiffSNSRatio DiffFE*, vce(cluster GameID)
+{txt}  4{com}.                 * Generate Matrices for Coefs, Variances, and PseudoR2s
+.                 quietly matrix `y'Coef`x' = e(b)
+{txt}  5{com}.                 quietly matrix `y'Coef`x' = `y'Coef`x'[1,1..7]
+{txt}  6{com}.                 quietly matrix `y'CoefV`x' = e(V)
+{txt}  7{com}.                 quietly scalar `y'PseudoR2`x' = e(r2_p)
+{txt}  8{com}.                 
+.                 * Generate Marginal Effects
+.                 quietly predict `y'xb`x', xb
+{txt}  9{com}.                 quietly gen `y'Predict`x' = exp(`y'xb`x')/(exp(`y'xb`x')+1)
+{txt} 10{com}.                 quietly gen `y'ME`x' = `y'Predict`x'*(1-`y'Predict`x')*`y'Coef`x'[1,1]
+{txt} 11{com}.                 
+.                 * Generate Variables and Matrices for AMEs and AME Variances
+.                 quietly margins, dydx(Diff`y'`x' DiffNonQBFantPt DiffHome DiffRestDays DifflogIM DiffSGini DiffSNSRatio) post
+{txt} 12{com}.                 quietly matrix `y'AME`x' = e(b)
+{txt} 13{com}.                 quietly gen `y'AME`x' = `y'AME`x'[1,1]
+{txt} 14{com}.                 quietly matrix `y'AMEV`x' = e(V)
+{txt} 15{com}.                 
+.                 * Calculate Logit Standard Errors
+.                 quietly matrix `y'CoefVDiag`x' = vecdiag(`y'CoefV`x')
+{txt} 16{com}.                 quietly local NColsCoef = colsof(`y'CoefVDiag`x')
+{txt} 17{com}.                 quietly matrix `y'CoefSE`x' = J(1,`NColsCoef',.)
+{txt} 18{com}.                 forvalues i = 1/`NColsCoef' {c -(}
+{txt} 19{com}.                         quietly matrix `y'CoefSE`x'[1,`i'] = sqrt(`y'CoefVDiag`x'[1,`i'])
+{txt} 20{com}.                 {c )-}
+{txt} 21{com}.                 quietly matrix `y'CoefSE`x' = `y'CoefSE`x'[1,1..7]
+{txt} 22{com}.                 
+.                 * Calculate Logit AME Standard Errors
+.                 quietly matrix `y'AMEVDiag`x' = vecdiag(`y'AMEV`x')
+{txt} 23{com}.                 quietly local NColsAME = colsof(`y'AMEVDiag`x')
+{txt} 24{com}.                 quietly matrix `y'AMESE`x' = J(1,`NColsAME',.)
+{txt} 25{com}.                 forvalues i = 1/`NColsAME' {c -(}
+{txt} 26{com}.                         quietly matrix `y'AMESE`x'[1,`i'] = sqrt(`y'AMEVDiag`x'[1,`i'])
+{txt} 27{com}.                 {c )-}
+{txt} 28{com}.                 quietly gen `y'AMESE`x' = `y'AMESE`x'[1,1]
+{txt} 29{com}.                 
+.                 * Linear Regressions with Game and Season Variables
+.                 quietly reg Win Diff`y'`x' DiffNonQBFantPt DiffHome DiffRestDays DifflogIM DiffSGini DiffSNSRatio DiffFE*, vce(cluster GameID)
+{txt} 30{com}.                 * Generate Matrices for Coefs, Variances, and R2s
+.                 quietly matrix `y'Lin`x' = e(b)
+{txt} 31{com}.                 quietly matrix `y'Lin`x' = `y'Lin`x'[1,1..7]
+{txt} 32{com}.                 quietly matrix `y'LinV`x' = e(V)
+{txt} 33{com}.                 quietly scalar `y'R2`x' = e(r2)
+{txt} 34{com}.                 
+.                 * Calculate Linear Standard Errors
+.                 quietly matrix `y'LinVDiag`x' = vecdiag(`y'LinV`x')
+{txt} 35{com}.                 quietly local NColsLin = colsof(`y'LinVDiag`x')
+{txt} 36{com}.                 quietly matrix `y'LinSE`x' = J(1,`NColsLin',.)
+{txt} 37{com}.                 forvalues i = 1/`NColsLin' {c -(}
+{txt} 38{com}.                         quietly matrix `y'LinSE`x'[1,`i'] = sqrt(`y'LinVDiag`x'[1,`i'])
+{txt} 39{com}.                 {c )-}
+{txt} 40{com}.                 quietly matrix `y'LinSE`x' = `y'LinSE`x'[1,1..7]
+{txt} 41{com}.         {c )-}
+{txt} 42{com}.         
+.         * Instrumental Variables
+.         foreach z in "" "NoQ4" {c -(}
+{txt} 43{com}.                 quietly ivregress 2sls Win (DiffGame`x' = DiffSeason`x'`z') DiffNonQBFantPt DiffHome DiffRestDays DifflogIM DiffSGini DiffSNSRatio DiffFE*, vce(cluster GameID)
+{txt} 44{com}.                 * Generate Matrices for Coefs, Variances, and R2s
+.                 quietly matrix IVLin`x'`z' = e(b)
+{txt} 45{com}.                 quietly matrix IVLin`x'`z' = IVLin`x'`z'[1,1..7]
+{txt} 46{com}.                 quietly matrix IVLinV`x'`z' = e(V)
+{txt} 47{com}.                 quietly scalar IVR2`x'`z' = e(r2)
+{txt} 48{com}.                 
+.                 * Calculate IV Standard Errors
+.                 quietly matrix IVLinVDiag`x'`z' = vecdiag(IVLinV`x'`z')
+{txt} 49{com}.                 quietly local NColsIV = colsof(IVLinVDiag`x'`z')
+{txt} 50{com}.                 quietly matrix IVLinSE`x'`z' = J(1,`NColsIV',.)
+{txt} 51{com}.                 forvalues i = 1/`NColsIV' {c -(}
+{txt} 52{com}.                         quietly matrix IVLinSE`x'`z'[1,`i'] = sqrt(IVLinVDiag`x'`z'[1,`i'])
+{txt} 53{com}.                 {c )-}
+{txt} 54{com}.                 quietly matrix IVLinSE`x'`z' = IVLinSE`x'`z'[1,1..7]
+{txt} 55{com}.                 
+.                 /* * First-Stage F Statistics
+>                 quietly estat firststage
+>                 quietly scalar IVF`x'`z' = r(singleresults)[1,4]
+>                 disp "`x'`z' F = " IVF`x'`z'
+>                 quietly scalar IVFp`x'`z' = r(singleresults)[1,7]
+>                 disp "`x'`z' p = " IVFp`x'`z' */
+.         {c )-}
+{txt} 56{com}. {c )-}
+{txt}
+{com}. 
+. * Make Tables
+. foreach x in Rate ANYA TANYA FPA {c -(}
+{txt}  2{com}.         matrix Table`x' = J(15,8,.)
+{txt}  3{com}.         forvalues i = 1/7 {c -(}
+{txt}  4{com}.                 quietly matrix Table`x'[2*`i'-1,1] = GameCoef`x'[1,`i']
+{txt}  5{com}.                 quietly matrix Table`x'[2*`i',1] = GameCoefSE`x'[1,`i']
+{txt}  6{com}.                 quietly matrix Table`x'[2*`i'-1,2] = GameAME`x'[1,`i']
+{txt}  7{com}.                 quietly matrix Table`x'[2*`i',2] = GameAMESE`x'[1,`i']
+{txt}  8{com}.                 quietly matrix Table`x'[2*`i'-1,3] = GameLin`x'[1,`i']
+{txt}  9{com}.                 quietly matrix Table`x'[2*`i',3] = GameLinSE`x'[1,`i']
+{txt} 10{com}.                 
+.                 quietly matrix Table`x'[2*`i'-1,4] = SeasonCoef`x'[1,`i']
+{txt} 11{com}.                 quietly matrix Table`x'[2*`i',4] = SeasonCoefSE`x'[1,`i']
+{txt} 12{com}.                 quietly matrix Table`x'[2*`i'-1,5] = SeasonAME`x'[1,`i']
+{txt} 13{com}.                 quietly matrix Table`x'[2*`i',5] = SeasonAMESE`x'[1,`i']
+{txt} 14{com}.                 quietly matrix Table`x'[2*`i'-1,6] = SeasonLin`x'[1,`i']
+{txt} 15{com}.                 quietly matrix Table`x'[2*`i',6] = SeasonLinSE`x'[1,`i']
+{txt} 16{com}.                 
+.                 quietly matrix Table`x'[2*`i'-1,7] = IVLin`x'[1,`i']
+{txt} 17{com}.                 quietly matrix Table`x'[2*`i',7] = IVLinSE`x'[1,`i']
+{txt} 18{com}.                 quietly matrix Table`x'[2*`i'-1,8] = IVLin`x'NoQ4[1,`i']
+{txt} 19{com}.                 quietly matrix Table`x'[2*`i',8] = IVLinSE`x'NoQ4[1,`i']
+{txt} 20{com}.         {c )-}
+{txt} 21{com}.         quietly matrix Table`x'[15,1] = GamePseudoR2`x'
+{txt} 22{com}.         quietly matrix Table`x'[15,3] = GameR2`x'
+{txt} 23{com}.         quietly matrix Table`x'[15,4] = SeasonPseudoR2`x'
+{txt} 24{com}.         quietly matrix Table`x'[15,6] = SeasonR2`x'
+{txt} 25{com}.         quietly matrix Table`x'[15,7] = IVR2`x'
+{txt} 26{com}.         quietly matrix Table`x'[15,8] = IVR2`x'NoQ4
+{txt} 27{com}. {c )-}
+{txt}
+{com}. matrix list TableRate
+{res}
+{txt}TableRate[15,8]
+             c1          c2          c3          c4          c5          c6          c7          c8
+ r1 {res}  .06026614   .00467274   .00502561   .03522235   .00352249   .00341661   .00772461    .0066349
+{txt} r2 {res}  .00370236   .00022109   .00023282     .008149   .00080861   .00067617   .00142871   .00168148
+{txt} r3 {res}  .10975441   .00850982   .00672461   .13309815   .01331077    .0118332   .00379455   .00497755
+{txt} r4 {res}  .00650713   .00038594   .00038982   .00562809   .00030937   .00029483   .00157758   .00184742
+{txt} r5 {res}  .25932748   .02010699   .01765406   .24727647   .02472942   .02117415   .01633762   .01686913
+{txt} r6 {res}  .06836359   .00524182   .00574089   .05629504   .00556903   .00612287   .00569903   .00566192
+{txt} r7 {res}  .00953919   .00073962   .00038903   .00822558   .00082262   .00058947   .00017409   .00026087
+{txt} r8 {res}  .02811825   .00218177   .00243283   .02349411   .00234894   .00257151   .00240131   .00237811
+{txt} r9 {res} -.05589588  -.00433389  -.00248398  -.02212839    -.002213  -.00227736  -.00367915   -.0031966
+{txt}r10 {res}  .13158354   .01019532   .01123488   .10488798   .01048827     .011796   .01121339   .01104156
+{txt}r11 {res}   3.114262   .24146469   .21845718   2.8606348   .28608402   .26503514   .19169001   .20249713
+{txt}r12 {res}  1.7440062   .13537421   .16214996   1.5826185   .15860794   .17314757   .15928115   .15831418
+{txt}r13 {res}  .24402844   .01892078   .01796811   .21349859   .02135139   .01244461   .01958281   .01893088
+{txt}r14 {res}  .24711762   .01919077   .02125104   .20688369   .02073309   .02258403   .02098892   .02073319
+{txt}r15 {res}  .64241561           .   .56693266   .54524679           .   .50872728   .54917915   .56062093
+{reset}
+{com}. matrix list TableANYA
+{res}
+{txt}TableANYA[15,8]
+             c1          c2          c3          c4          c5          c6          c7          c8
+ r1 {res}  .60636068   .04716405   .04601039   .31985819   .03202625   .02916349   .07233884   .05816838
+{txt} r2 {res}  .03648231   .00223814   .00221977   .07339329   .00732397   .00632163   .01501176   .01723765
+{txt} r3 {res}  .10338422   .00804145   .00643697   .13284864   .01330166   .01182552   .00315037   .00491928
+{txt} r4 {res}  .00664567    .0004138   .00040052   .00564448     .000315   .00029763   .00190431   .00217426
+{txt} r5 {res}   .2533336   .01970484    .0185796    .2463556    .0246667   .02131802   .01770655   .01817644
+{txt} r6 {res}  .06690836   .00515792   .00576638   .05614619   .00555956   .00613031   .00570684   .00563309
+{txt} r7 {res} -.01243408  -.00096715  -.00030626   .00896573   .00089771   .00062198  -.00093316  -.00059575
+{txt} r8 {res}  .02792189   .00216874   .00243877   .02351356   .00235363   .00257536   .00243121   .00241398
+{txt} r9 {res}  -.1305703  -.01015604   -.0034746  -.02880085  -.00288373  -.00246484  -.00531491  -.00432442
+{txt}r10 {res}  .13053283   .01013441   .01121198   .10420327    .0104325   .01180059   .01119817    .0110006
+{txt}r11 {res}  3.4220735   .26617631   .25692533   2.8082911   .28118411   .27017725   .25041736   .25392007
+{txt}r12 {res}  1.7498866   .13599133   .16319735   1.6031228   .16079813   .17354681   .15946827   .15799425
+{txt}r13 {res}  .10250925   .00797339   .01386839   .18913159   .01893707   .01150639   .01324288   .01357954
+{txt}r14 {res}  .24093699   .01874938   .02135075   .20584192   .02064331   .02258613   .02105873   .02074923
+{txt}r15 {res}  .64242032           .   .56189094   .54481529           .   .50814573   .54338627   .55794496
+{reset}
+{com}. matrix list TableTANYA
+{res}
+{txt}TableTANYA[15,8]
+             c1          c2          c3          c4          c5          c6          c7          c8
+ r1 {res}  .64339288   .05081632   .04655092   .33965411   .03397563   .03354855   .08228225   .07000058
+{txt} r2 {res}  .03678213   .00238229    .0024203   .07338892   .00729516   .00634066   .01573773   .01737286
+{txt} r3 {res}   .1096779   .00866256   .00700945   .13339096   .01334311   .01185773    .0030403   .00440459
+{txt} r4 {res}  .00662583   .00040597   .00040236   .00563473   .00031047   .00029404   .00177584   .00195355
+{txt} r5 {res}   .2150326   .01698366   .01641358    .2470528   .02471271    .0214671    .0135799    .0145539
+{txt} r6 {res}  .06549065   .00513629   .00581746   .05618091   .00555814   .00612615   .00591207   .00585871
+{txt} r7 {res} -.01819451  -.00143704  -.00038208   .00900693   .00090096   .00062722  -.00128118  -.00097214
+{txt} r8 {res}  .02692397   .00212347   .00244578   .02355726   .00235563   .00257374   .00245583   .00243451
+{txt} r9 {res}  -.1036697  -.00818802  -.00278716  -.03633157  -.00363425  -.00340357  -.00472807  -.00406093
+{txt}r10 {res}  .12646571   .00998041   .01122837   .10412029   .01041403   .01178551    .0112723   .01107163
+{txt}r11 {res}  2.3568894   .18615134   .23260352   2.6283669   .26291579   .25270401   .20520505   .21462252
+{txt}r12 {res}  1.7869561   .14103368    .1652591   1.6026137   .16053799   .17321962   .16364642   .16156295
+{txt}r13 {res}  .03486534   .00275373   .01166586    .1651204   .01651701   .00871325   .00913621   .01000571
+{txt}r14 {res}  .24289297   .01918747   .02159084   .20670945   .02070536   .02256368   .02157904   .02120734
+{txt}r15 {res}  .63715666           .    .5540075   .54510914           .   .50883844   .52535679   .54166764
+{reset}
+{com}. matrix list TableFPA
+{res}
+{txt}TableFPA[15,8]
+             c1          c2          c3          c4          c5          c6          c7          c8
+ r1 {res}  7.8924744   .60178279   .50957221   5.1542274   .51328809   .52081867   .84786845   .72404297
+{txt} r2 {res}  .46348696   .02750103    .0265429   .93737382   .09241578   .08294347   .13509858   .14239971
+{txt} r3 {res}   .1405054   .01071321   .00871733   .13453313   .01339759   .01192048   .00641822   .00725975
+{txt} r4 {res}  .00684181   .00034166   .00034657   .00563635   .00030509   .00029011   .00097692   .00101609
+{txt} r5 {res}  .18171818   .01385559   .01324491   .24874626   .02477161   .02130743   .00869041   .01035748
+{txt} r6 {res}  .06711252   .00508467   .00580932   .05644622   .00555833   .00611305   .00601602   .00599705
+{txt} r7 {res} -.01475392  -.00112495  -.00024281    .0076361   .00076045   .00052729  -.00092799  -.00067719
+{txt} r8 {res}  .02812281   .00214262   .00246263   .02363539   .00235312   .00256734   .00244681   .00242409
+{txt} r9 {res} -.17954292  -.01368973  -.00491315  -.04161272  -.00414404  -.00393831  -.00800326   -.0068722
+{txt}r10 {res}  .12713092   .00969351   .01121688   .10402388   .01035751   .01176162   .01117405   .01102383
+{txt}r11 {res}  2.4763849   .18881858   .19634341   2.3720427   .23622188   .22657568   .14857376   .16605873
+{txt}r12 {res}  1.8279982   .13960012   .16398435   1.5891429   .15848208   .17243822   .16139836    .1602562
+{txt}r13 {res} -.04864433  -.00370902   .01073862   .13264072   .01320914   .00560879   .00793513   .00896128
+{txt}r14 {res}  .24694819   .01881942   .02153712   .20701008   .02063762   .02261475   .02128641   .02101842
+{txt}r15 {res}  .65022099           .   .55469863   .54688442           .   .51021149   .53296136   .54596194
+{reset}
+{com}. 
+. * Summary Statistics
+. foreach y in "" "Win" "Loss" {c -(}
+{txt}  2{com}.         foreach x in GameRate SeasonRate GameANYA SeasonANYA GameTANYA SeasonTANYA GameFPA SeasonFPA NonQBFantPt Home RestDays logIM SGini SNSRatio {c -(}
+{txt}  3{com}.                 quietly sum `x' if "`y'" == ""
+{txt}  4{com}.                 else if "`y'" != "" {c -(}
+{txt}  5{com}.                         quietly sum `x' if `y' == 1
+{txt}  6{com}.                 {c )-}
+{txt}  7{com}.                 quietly scalar Mean`x'`y' = r(mean)
+{txt}  8{com}.                 quietly scalar SD`x'`y' = r(sd)
+{txt}  9{com}.                 quietly scalar Min`x'`y' = r(min)
+{txt} 10{com}.                 quietly scalar Max`x'`y' = r(max)
+{txt} 11{com}.         {c )-}
+{txt} 12{com}. {c )-}
+{txt}
+{com}. 
+. matrix Summary = J(42,4,.)
+{txt}
+{com}. local CountX = 0
+{txt}
+{com}. foreach x in "" "Win" "Loss" {c -(}
+{txt}  2{com}.         quietly local CountY = 1
+{txt}  3{com}.         foreach y in "Mean" "SD" "Min" "Max" {c -(}
+{txt}  4{com}.                 quietly local CountZ = 0
+{txt}  5{com}.                 foreach z in "Rate" "ANYA" "TANYA" "FPA" {c -(}
+{txt}  6{com}.                         quietly matrix Summary[`CountZ'*2+1+`CountX'*14,`CountY'] = `y'Game`z'`x'
+{txt}  7{com}.                         quietly matrix Summary[`CountZ'*2+2+`CountX'*14,`CountY'] = `y'Season`z'`x'
+{txt}  8{com}.                         quietly local CountZ = `CountZ'+1
+{txt}  9{com}.                 {c )-}
+{txt} 10{com}.                 quietly matrix Summary[9+`CountX'*14,`CountY'] = `y'NonQBFantPt`x'
+{txt} 11{com}.                 quietly matrix Summary[10+`CountX'*14,`CountY'] = `y'Home`x'
+{txt} 12{com}.                 quietly matrix Summary[11+`CountX'*14,`CountY'] = `y'RestDays`x'
+{txt} 13{com}.                 quietly matrix Summary[12+`CountX'*14,`CountY'] = `y'logIM`x'
+{txt} 14{com}.                 quietly matrix Summary[13+`CountX'*14,`CountY'] = `y'SGini`x'
+{txt} 15{com}.                 quietly matrix Summary[14+`CountX'*14,`CountY'] = `y'SNSRatio`x'
+{txt} 16{com}.                 quietly local CountY = `CountY'+1
+{txt} 17{com}.         {c )-}
+{txt} 18{com}.         quietly local CountX = `CountX'+1
+{txt} 19{com}. {c )-}
+{txt}
+{com}. matrix list Summary
+{res}
+{txt}Summary[42,4]
+             c1          c2          c3          c4
+ r1 {res}  89.943738   26.089573           0   158.33333
+{txt} r2 {res}  89.231052   12.597689           0   128.75555
+{txt} r3 {res}  6.2085981   2.8253886  -7.8000002   19.608696
+{txt} r4 {res}  6.0736864   1.2916267  -7.8000002   10.153846
+{txt} r5 {res}  5.8246546   2.6262501    -10.8125   16.956522
+{txt} r6 {res}  5.7314357   1.2232688  -5.9166665   9.4907408
+{txt} r7 {res}  .43469567   .20931046  -.47833332   1.4314286
+{txt} r8 {res}  .42674623   .09640572  -.25272727   .76083332
+{txt} r9 {res}  66.884402   17.315711           4       155.2
+{txt}r10 {res}         .5   .50003454           0           1
+{txt}r11 {res}  6.9434927   2.8064526           3          17
+{txt}r12 {res}  16.651589   .74634273   11.338834   18.382246
+{txt}r13 {res}  .48131697   .05921064   .25448316   .69520438
+{txt}r14 {res}  1.2108091   .48868641   .09776209   4.0969539
+{txt}r15 {res}    102.257   23.598535   2.7777779   158.33333
+{txt}r16 {res}  92.737948   11.553133       31.25   128.75555
+{txt}r17 {res}  7.5562527   2.6036678  -3.4117646   19.608696
+{txt}r18 {res}  6.4460364   1.1603913   .75609756   10.153846
+{txt}r19 {res}  7.0290002   2.3645063  -1.1904762   16.956522
+{txt}r20 {res}  6.0690331   1.0866912   .83582091   9.4907408
+{txt}r21 {res}  .52242267   .20747068        .032   1.4314286
+{txt}r22 {res}  .45117234   .09114195   .06571428   .76083332
+{txt}r23 {res}  74.442968   15.519966           4       155.2
+{txt}r24 {res}  .55540204    .4969898           0           1
+{txt}r25 {res}  6.9613153    2.836165           3          17
+{txt}r26 {res}  16.607393   .73852339   11.338834   18.351299
+{txt}r27 {res}  .47925007   .05884894   .28719735   .69520438
+{txt}r28 {res}  1.2480154   .48946255    .1768575   4.0969539
+{txt}r29 {res}  77.630481   22.390009           0   150.48077
+{txt}r30 {res}  85.724157   12.624146           0   122.46016
+{txt}r31 {res}  4.8609434    2.356992  -7.8000002      13.125
+{txt}r32 {res}  5.7013364   1.3088875  -7.8000002   9.3940525
+{txt}r33 {res}  4.6203091   2.3029757    -10.8125   14.222222
+{txt}r34 {res}  5.3938383   1.2586827  -5.9166665   8.9816055
+{txt}r35 {res}  .34696867   .17086093  -.47833332   1.1933334
+{txt}r36 {res}  .40232012   .09534274  -.25272727   .72041595
+{txt}r37 {res}  59.325836    15.63924           6       122.3
+{txt}r38 {res}  .44459796    .4969898           0           1
+{txt}r39 {res}  6.9256701   2.7766999           3          17
+{txt}r40 {res}  16.695786   .75158793   12.804909   18.382246
+{txt}r41 {res}  .48338388   .05950651   .25448316    .6817252
+{txt}r42 {res}  1.1736028   .48513075   .09776209   3.8986552
+{reset}
+{com}. 
+. * Count effective number of observations and FEs
+. gen Ones = 1
+{txt}
+{com}. egen CountPlayer = sum(Ones), by(FE Player)
+{txt}
+{com}. egen CountFE = sum(Ones), by(FE)
+{txt}
+{com}. gen Change = 0
+{txt}
+{com}. replace Change = 1 if CountPlayer < CountFE
+{txt}(4,402 real changes made)
+
+{com}. 
+. gen Time = 1
+{txt}
+{com}. local NObs = _N
+{txt}
+{com}. forvalues i = 2/`NObs'{c -(}
+{txt}  2{com}.         quietly replace Time in `i' = Time[`i'-1]+1 if FE[`i'-1] == FE[`i']
+{txt}  3{com}.         quietly replace Time in `i' = 1 if FE[`i'-1] != FE[`i']
+{txt}  4{com}. {c )-}
+{txt}
+{com}. 
+. count if Change == 1
+  {res}4,402
+{txt}
+{com}. local Num = r(N)
+{txt}
+{com}. count
+  {res}7,238
+{txt}
+{com}. local Denom = r(N)
+{txt}
+{com}. disp `Num'/`Denom'*100
+{res}60.817905
+{txt}
+{com}. 
+. count if Change == 1 & Time == 1
+  {res}271
+{txt}
+{com}. local Num = r(N)
+{txt}
+{com}. count if Time == 1
+  {res}447
+{txt}
+{com}. local Denom = r(N)
+{txt}
+{com}. disp `Num'/`Denom'*100
+{res}60.626398
+{txt}
+{com}. 
+. export delimited Home GameMERate SeasonMERate GameMEANYA SeasonMEANYA GameMETANYA SeasonMETANYA GameMEFPA SeasonMEFPA using "C:/Users/Owner/OneDrive/Documents/Georgetown University/Thesis Writer/Research/QB Worth/Game Analysis/1 ME Histograms.csv", replace
+{res}{txt}file {bf:C:/Users/Owner/OneDrive/Documents/Georgetown University/Thesis Writer/Research/QB Worth/Game Analysis/1 ME Histograms.csv} saved
+
+{com}. scalar t2 = c(current_time)
+{txt}
+{com}. gen Runtime = cond(clock(t2,"hms")>=clock(t1,"hms"), (clock(t2,"hms")-clock(t1,"hms"))/60000, (clock(t2,"hms")+24*60*60*1000-clock(t1,"hms"))/60000)
+{txt}
+{com}. disp Runtime " minutes"
+{res}3.4333334 minutes
+{txt}
+{com}. save "C:/Users/Owner/OneDrive/Documents/Georgetown University/Thesis Writer/Research/QB Worth/Season Analysis/Data 12 AME.dta", replace
+{txt}{p 0 4 2}
+file {bf}
+C:/Users/Owner/OneDrive/Documents/Georgetown University/Thesis Writer/Research/QB Worth/Season Analysis/Data 12 AME.dta{rm}
+saved
+{p_end}
+
+{com}. log close
+      {txt}name:  {res}<unnamed>
+       {txt}log:  {res}C:/Users/Owner/OneDrive/Documents/Georgetown University/Thesis Writer/Research/QB Worth/Game Analysis/Do 12 Game Analysis.smcl
+  {txt}log type:  {res}smcl
+ {txt}closed on:  {res}24 Aug 2025, 14:02:11
+{txt}{.-}
+{smcl}
+{txt}{sf}{ul off}

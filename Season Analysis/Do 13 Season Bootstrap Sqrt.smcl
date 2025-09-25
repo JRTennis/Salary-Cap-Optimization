@@ -1,0 +1,813 @@
+{smcl}
+{txt}{sf}{ul off}{.-}
+      name:  {res}<unnamed>
+       {txt}log:  {res}C:/Users/Owner/OneDrive/Documents/Georgetown University/Thesis Writer/Research/QB Worth/Season Analysis/Do 13 Season Bootstrap Sqrt.smcl
+  {txt}log type:  {res}smcl
+ {txt}opened on:  {res}11 Sep 2025, 12:30:29
+{txt}
+{com}. clear all
+{res}{txt}
+{com}. set more off
+{txt}
+{com}. timer clear 1
+{txt}
+{com}. timer on 1
+{txt}
+{com}. 
+. * Game-level AMEs
+. local SeasonFlag = 0
+{txt}
+{com}. if `SeasonFlag' == 0 {c -(}
+.         use "C:/Users/Owner/OneDrive/Documents/Georgetown University/Thesis Writer/Research/QB Worth/Season Analysis/Data 17 Game Bootstrap.dta", clear
+. {c )-}
+{txt}
+{com}. else if `SeasonFlag' == 1 {c -(}
+.         use "C:/Users/Owner/OneDrive/Documents/Georgetown University/Thesis Writer/Research/QB Worth/Season Analysis/Data 18 Game Bootstrap Pre-2018.dta", clear
+. {c )-}
+{txt}
+{com}. else if `SeasonFlag' == 2 {c -(}
+.         use "C:/Users/Owner/OneDrive/Documents/Georgetown University/Thesis Writer/Research/QB Worth/Season Analysis/Data 19 Game Bootstrap Post-2018.dta", clear
+. {c )-}
+{txt}
+{com}. 
+. * Create observation index
+. gen obs_id = _n
+{txt}
+{com}. 
+. * First 500 rows → SeasonAMEs1
+. preserve
+{txt}
+{com}. keep if obs_id <= 500
+{txt}(500 observations deleted)
+
+{com}. mkmat Rate ANYA TANYA FPA, matrix(SeasonAMEs1)
+{res}{txt}
+{com}. restore
+{txt}
+{com}. 
+. * Last 500 rows → SeasonAMEs2
+. keep if obs_id > 500
+{txt}(500 observations deleted)
+
+{com}. mkmat Rate ANYA TANYA FPA, matrix(SeasonAMEs2)
+{res}{txt}
+{com}. 
+. * Season-level data
+. use "C:/Users/Owner/OneDrive/Documents/Georgetown University/Thesis Writer/Research/QB Worth/Season Analysis/Data 11 Season Merge.dta", replace
+{txt}
+{com}. if `SeasonFlag' == 1 {c -(}
+.         keep if Season < 2018
+. {c )-}
+{txt}
+{com}. else if `SeasonFlag' == 2 {c -(}
+.         keep if Season >= 2018
+. {c )-}
+{txt}
+{com}. local CoYFlag = 1
+{txt}
+{com}. local End = 21+`CoYFlag'
+{txt}
+{com}. 
+. * Count observations
+. count
+  {res}448
+{txt}
+{com}. local Reps = 500
+{txt}
+{com}. local Progress = 50
+{txt}
+{com}. set seed 72
+{txt}
+{com}. 
+. * 2011 Indianapolis Colts missing Vegas Wins O/U
+. gen MissWinTotal = 0
+{txt}
+{com}. replace MissWinTotal = 1 if WinTotal == .
+{txt}(1 real change made)
+
+{com}. label variable MissWinTotal MissWinTotal
+{txt}
+{com}. order MissWinTotal, after(WinTotal)
+{txt}
+{com}. quietly sum WinTotal
+{txt}
+{com}. local MeanWinTotal = r(mean)
+{txt}
+{com}. replace WinTotal = `MeanWinTotal' if WinTotal == .
+{txt}(1 real change made)
+
+{com}. 
+. * Generate Fixed Effects
+. sort Team Season
+{txt}
+{com}. local NObs = _N
+{txt}
+{com}. gen FE = 1
+{txt}
+{com}. forvalues i = 2/`NObs' {c -(}
+{txt}  2{com}.         quietly replace FE in `i' = FE[`i'-1] if Team[`i'] == Team[`i'-1]
+{txt}  3{com}.         quietly replace FE in `i' = FE[`i'-1]+1 if Team[`i'] != Team[`i'-1]
+{txt}  4{com}. {c )-}
+{txt}
+{com}. drop ActualTeam Diff Playoffs SBApp SBWin
+{txt}
+{com}. xtset FE Season
+{res}
+{col 1}{txt:Panel variable: }{res:FE}{txt: (strongly balanced)}
+{p 1 16 2}{txt:Time variable: }{res:Season}{txt:, }{res:{bind:2011}}{txt: to }{res:{bind:2024}}{p_end}
+{txt}{col 10}Delta: {res}1 unit
+{txt}
+{com}. 
+. forvalues i = 1/32 {c -(}
+{txt}  2{com}.         quietly gen FE`i' = 0
+{txt}  3{com}.         quietly replace FE`i' = 1 if FE == `i'
+{txt}  4{com}. {c )-}
+{txt}
+{com}. forvalues i = 2011/2024 {c -(}
+{txt}  2{com}.         quietly gen Season`i' = 0
+{txt}  3{com}.         quietly replace Season`i' = 1 if Season == `i'
+{txt}  4{com}. {c )-}
+{txt}
+{com}. 
+. * Replace season fixed effects with 17 game season dummy
+. gen SeasonPost2021 = 0
+{txt}
+{com}. replace SeasonPost2021 = 1 if Season >= 2021
+{txt}(128 real changes made)
+
+{com}. replace SeasonPost2021 = 0 if Season == 2022 & (Team == "Buffalo Bills" | Team == "Cincinnati Bengals")
+{txt}(2 real changes made)
+
+{com}. 
+. * Generate variables (Pool FB with RB)
+. gen RBFBAV = RBAV+FBAV
+{txt}
+{com}. gen RBFBCap = RBCap+FBCap
+{txt}
+{com}. gen Cap = QBCap+RBFBCap+WRCap+TECap+LTCap+GCap+CCap+RTCap+DECap+DTCap+ILBCap+OLBCap+CBCap+FSCap+SSCap+KCap+PCap+LSCap
+{txt}
+{com}. foreach i in Rook Vet {c -(}
+{txt}  2{com}.         gen `i'RBFBAV = `i'RBAV+`i'FBAV
+{txt}  3{com}.         gen `i'RBFBCap = `i'RBCap+`i'FBCap
+{txt}  4{com}.         gen `i'Cap = `i'QBCap+`i'RBFBCap+`i'WRCap+`i'TECap+`i'LTCap+`i'GCap+`i'CCap+`i'RTCap+`i'DECap+`i'DTCap+`i'ILBCap+`i'OLBCap+`i'CBCap+`i'FSCap+`i'SSCap+`i'KCap+`i'PCap+`i'LSCap
+{txt}  5{com}.         
+.         foreach x in QB RBFB WR TE LT G C RT DE DT ILB OLB CB FS SS K P LS {c -(}
+{txt}  6{com}.                 quietly gen `i'`x'CapPct = `i'`x'Cap/`i'Cap*100
+{txt}  7{com}.                 quietly gen Sqrt`i'`x'CapPct = sqrt(`i'`x'CapPct)
+{txt}  8{com}.         {c )-}
+{txt}  9{com}. {c )-}
+{txt}
+{com}. 
+. * Compute QBAV constraint
+. quietly sum QBAV
+{txt}
+{com}. scalar QBAVSD = r(sd)
+{txt}
+{com}. scalar Factor = (10*16+4*17)/14
+{txt}
+{com}. local i = 1
+{txt}
+{com}. foreach x in Rate ANYA TANYA FPA {c -(}
+{txt}  2{com}.         quietly sum `x'
+{txt}  3{com}.         scalar `x'SD = r(sd)
+{txt}  4{com}.         matrix `x'Const1 = SeasonAMEs1[1..rowsof(SeasonAMEs1),`i']*(`x'SD/QBAVSD)*Factor
+{txt}  5{com}.         matrix `x'Const2 = SeasonAMEs2[1..rowsof(SeasonAMEs1),`i']*(`x'SD/QBAVSD)*Factor
+{txt}  6{com}.         local ++i
+{txt}  7{com}. {c )-}
+{txt}
+{com}. 
+. * Obtain optimal weights
+. tempfile dataset
+{txt}
+{com}. save `dataset', replace
+{txt}{p 0 4 2}
+(file {bf}
+C:\Users\Owner\AppData\Local\Temp\ST_f10_000002.tmp{rm}
+not found)
+{p_end}
+{p 0 4 2}
+file {bf}
+C:\Users\Owner\AppData\Local\Temp\ST_f10_000002.tmp{rm}
+saved
+as .dta format
+{p_end}
+
+{com}. 
+. if `SeasonFlag' == 0 {c -(}
+.         use "C:\Users\Owner\OneDrive\Documents\Georgetown University\Thesis Writer\Research\QB Worth\Season Analysis\Data 17 Game Bootstrap.dta", clear
+. {c )-}
+{txt}
+{com}. else if `SeasonFlag' == 1 {c -(}
+.         use "C:\Users\Owner\OneDrive\Documents\Georgetown University\Thesis Writer\Research\QB Worth\Season Analysis\Data 18 Game Bootstrap Pre-2018.dta", clear
+. {c )-}
+{txt}
+{com}. else if `SeasonFlag' == 2 {c -(}
+.         use "C:\Users\Owner\OneDrive\Documents\Georgetown University\Thesis Writer\Research\QB Worth\Season Analysis\Data 19 Game Bootstrap Post-2018.dta", clear
+. {c )-}
+{txt}
+{com}. 
+. foreach x in Rate ANYA TANYA FPA {c -(}
+{txt}  2{com}.     quietly gen `x'Scale = `x'*(`x'SD/QBAVSD)*Factor
+{txt}  3{com}. {c )-}
+{txt}
+{com}. corr RateScale ANYAScale TANYAScale FPAScale, cov
+{txt}(obs=1,000)
+
+             {c |} RateSc~e ANYASc~e TANYAS~e FPAScale
+{hline 13}{c +}{hline 36}
+   RateScale {c |}{res}  .001961
+   {txt}ANYAScale {c |}{res}  .001567  .001586
+  {txt}TANYAScale {c |}{res}  .001302   .00137  .001379
+    {txt}FPAScale {c |}{res}  .001222  .001109  .001216  .001595
+
+{txt}
+{com}. matrix BootV = r(C)
+{txt}
+{com}. matrix InvBootV = invsym(BootV)
+{txt}
+{com}. matrix Ones = J(4,1,1)
+{txt}
+{com}. matrix Denom = Ones'*InvBootV *Ones
+{txt}
+{com}. matrix Weights = InvBootV*Ones/Denom[1,1]
+{txt}
+{com}. 
+. use `dataset', clear
+{txt}
+{com}. matrix AvgConst1 = Weights[1,1]*RateConst1+Weights[2,1]*ANYAConst1+Weights[3,1]*TANYAConst1+Weights[4,1]*FPAConst1
+{txt}
+{com}. matrix AvgConst2 = Weights[1,1]*RateConst2+Weights[2,1]*ANYAConst2+Weights[3,1]*TANYAConst2+Weights[4,1]*FPAConst2
+{txt}
+{com}. gen wins = Wins
+{txt}
+{com}. 
+. * First half
+. matrix ImpCoefs1 = J(`Reps', `End', .)
+{txt}
+{com}. matrix CECoefs1 = J(`Reps', 36, .)
+{txt}
+{com}. 
+. forvalues i = 1/`Reps' {c -(}
+{txt}  2{com}.     preserve
+{txt}  3{com}.     bsample, cluster(FE)
+{txt}  4{com}.         
+.         * Importance regression
+.         local AvgConst1 = AvgConst1[`i',1]
+{txt}  5{com}.         capture {c -(}
+{txt}  6{com}.                 if `CoYFlag' == 0 {c -(}
+{txt}  7{com}.                         nl (wins=`AvgConst1'*QBAV+exp({c -(}lnb2{c )-})*RBFBAV+exp({c -(}lnb3{c )-})*WRAV+exp({c -(}lnb4{c )-})*TEAV+exp({c -(}lnb5{c )-})*LTAV+exp({c -(}lnb6{c )-})*GAV+exp({c -(}lnb7{c )-})*CAV+exp({c -(}lnb8{c )-})*RTAV+exp({c -(}lnb9{c )-})*DEAV+exp({c -(}lnb10{c )-})*DTAV+exp({c -(}lnb11{c )-})*ILBAV+exp({c -(}lnb12{c )-})*OLBAV+exp({c -(}lnb13{c )-})*CBAV+exp({c -(}lnb14{c )-})*FSAV+exp({c -(}lnb15{c )-})*SSAV+exp({c -(}lnb16{c )-})*KAV+exp({c -(}lnb17{c )-})*PAV+exp({c -(}lnb18{c )-})*LSAV+{c -(}a1{c )-}*WinTotal+{c -(}a2{c )-}*MissWinTotal+{c -(}a3{c )-}*SeasonPost2021+{c -(}i2{c )-}*FE2+{c -(}i3{c )-}*FE3+{c -(}i4{c )-}*FE4+{c -(}i5{c )-}*FE5+{c -(}i6{c )-}*FE6+{c -(}i7{c )-}*FE7+{c -(}i8{c )-}*FE8+{c -(}i9{c )-}*FE9+{c -(}i10{c )-}*FE10+{c -(}i11{c )-}*FE11+{c -(}i12{c )-}*FE12+{c -(}i13{c )-}*FE13+{c -(}i14{c )-}*FE14+{c -(}i15{c )-}*FE15+{c -(}i16{c )-}*FE16+{c -(}i17{c )-}*FE17+{c -(}i18{c )-}*FE18+{c -(}i19{c )-}*FE19+{c -(}i20{c )-}*FE20+{c -(}i21{c )-}*FE21+{c -(}i22{c )-}*FE22+{c -(}i23{c )-}*FE23+{c -(}i24{c )-}*FE24+{c -(}i25{c )-}*FE25+{c -(}i26{c )-}*FE26+{c -(}i27{c )-}*FE27+{c -(}i28{c )-}*FE28+{c -(}i29{c )-}*FE29+{c -(}i30{c )-}*FE30+{c -(}i31{c )-}*FE31+{c -(}i32{c )-}*FE32+{c -(}b0{c )-}), vce(cluster FE) iterate(500)
+{txt}  8{com}.                 {c )-}
+{txt}  9{com}.                 else if `CoYFlag' == 1 {c -(}
+{txt} 10{com}.                         nl (wins=`AvgConst1'*QBAV+exp({c -(}lnb2{c )-})*RBFBAV+exp({c -(}lnb3{c )-})*WRAV+exp({c -(}lnb4{c )-})*TEAV+exp({c -(}lnb5{c )-})*LTAV+exp({c -(}lnb6{c )-})*GAV+exp({c -(}lnb7{c )-})*CAV+exp({c -(}lnb8{c )-})*RTAV+exp({c -(}lnb9{c )-})*DEAV+exp({c -(}lnb10{c )-})*DTAV+exp({c -(}lnb11{c )-})*ILBAV+exp({c -(}lnb12{c )-})*OLBAV+exp({c -(}lnb13{c )-})*CBAV+exp({c -(}lnb14{c )-})*FSAV+exp({c -(}lnb15{c )-})*SSAV+exp({c -(}lnb16{c )-})*KAV+exp({c -(}lnb17{c )-})*PAV+exp({c -(}lnb18{c )-})*LSAV+{c -(}a1{c )-}*WinTotal+{c -(}a2{c )-}*MissWinTotal+{c -(}a3{c )-}*SeasonPost2021+{c -(}a4{c )-}*CoY+{c -(}i2{c )-}*FE2+{c -(}i3{c )-}*FE3+{c -(}i4{c )-}*FE4+{c -(}i5{c )-}*FE5+{c -(}i6{c )-}*FE6+{c -(}i7{c )-}*FE7+{c -(}i8{c )-}*FE8+{c -(}i9{c )-}*FE9+{c -(}i10{c )-}*FE10+{c -(}i11{c )-}*FE11+{c -(}i12{c )-}*FE12+{c -(}i13{c )-}*FE13+{c -(}i14{c )-}*FE14+{c -(}i15{c )-}*FE15+{c -(}i16{c )-}*FE16+{c -(}i17{c )-}*FE17+{c -(}i18{c )-}*FE18+{c -(}i19{c )-}*FE19+{c -(}i20{c )-}*FE20+{c -(}i21{c )-}*FE21+{c -(}i22{c )-}*FE22+{c -(}i23{c )-}*FE23+{c -(}i24{c )-}*FE24+{c -(}i25{c )-}*FE25+{c -(}i26{c )-}*FE26+{c -(}i27{c )-}*FE27+{c -(}i28{c )-}*FE28+{c -(}i29{c )-}*FE29+{c -(}i30{c )-}*FE30+{c -(}i31{c )-}*FE31+{c -(}i32{c )-}*FE32+{c -(}b0{c )-}), vce(cluster FE) iterate(500)
+{txt} 11{com}.                 {c )-}
+{txt} 12{com}.         {c )-}
+{txt} 13{com}. 
+.         if _rc == 0 {c -(}
+{txt} 14{com}.                 matrix Const = e(b)
+{txt} 15{com}.                 if c(version) >= 19 {c -(}
+{txt} 16{com}.                         matrix Constlnb2lnb9 = Const[1,45+`CoYFlag'..52+`CoYFlag']
+{txt} 17{com}.                         matrix Constlnb10lnb18 = Const[1,36+`CoYFlag'..44+`CoYFlag']
+{txt} 18{com}.                         matrix Consta = Const[1,1..3+`CoYFlag']
+{txt} 19{com}.                         matrix Consti2 = Const[1,15+`CoYFlag']
+{txt} 20{com}.                         matrix Consti3 = Const[1,26+`CoYFlag']
+{txt} 21{com}.                         matrix Consti4i9 = Const[1,30+`CoYFlag'..35+`CoYFlag']
+{txt} 22{com}.                         matrix Consti10i19 = Const[1,5+`CoYFlag'..14+`CoYFlag']
+{txt} 23{com}.                         matrix Consti20i29 = Const[1,16+`CoYFlag'..25+`CoYFlag']
+{txt} 24{com}.                         matrix Consti30i32 = Const[1,27+`CoYFlag'..29+`CoYFlag']
+{txt} 25{com}.                         matrix Constb0 = Const[1,4+`CoYFlag']
+{txt} 26{com}.                         matrix Const = (Constlnb2lnb9, Constlnb10lnb18, Consta, Consti2, Consti3, Consti4i9, Consti10i19, Consti20i29, Consti30i32, Constb0)
+{txt} 27{com}.                         matrix drop Constlnb2lnb9 Constlnb10lnb18 Consta Consti2 Consti3 Consti4i9 Consti10i19 Consti20i29 Consti30i32 Constb0
+{txt} 28{com}.                 {c )-}
+{txt} 29{com}.                 
+.                 forvalues j = 2/18 {c -(}
+{txt} 30{com}.                         if c(version) < 19 {c -(}
+{txt} 31{com}.                                 quietly nlcom b`j': exp(_b[lnb`j':_cons])
+{txt} 32{com}.                         {c )-}
+{txt} 33{com}.                         else {c -(}
+{txt} 34{com}.                                 quietly nlcom b`j': exp(_b[lnb`j'])
+{txt} 35{com}.                         {c )-}
+{txt} 36{com}.                         quietly matrix Const[1,`j'-1] = r(b)
+{txt} 37{com}.                 {c )-}
+{txt} 38{com}.                 
+.                 matrix ImpCoefs1[`i',1] = AvgConst1[`i',1]
+{txt} 39{com}.                 forvalues j = 2/`End' {c -(}
+{txt} 40{com}.                         matrix ImpCoefs1[`i',`j'] = Const[1,`j'-1]
+{txt} 41{com}.                 {c )-}
+{txt} 42{com}.         {c )-}
+{txt} 43{com}.         
+.         else {c -(}
+{txt} 44{com}.                 display as error "Warning: NLS failed on rep `i'"
+{txt} 45{com}.         {c )-}
+{txt} 46{com}.         
+.         * Cost effectiveness regressions
+.         local j = 1
+{txt} 47{com}.         foreach c in Rook Vet {c -(}
+{txt} 48{com}.                 foreach x in QB RBFB WR TE LT G C RT DE DT ILB OLB CB FS SS K P LS {c -(}
+{txt} 49{com}.                         capture {c -(}
+{txt} 50{com}.                                 reg `c'`x'AV Sqrt`c'`x'CapPct, vce(cluster FE)
+{txt} 51{com}.                         {c )-}
+{txt} 52{com}.                         
+.                         if _rc == 0 {c -(}
+{txt} 53{com}.                                 matrix Coefs`j' = e(b)
+{txt} 54{com}.                                 matrix CECoefs1[`i',`j'] = Coefs`j'[1,1]
+{txt} 55{com}.                         {c )-}
+{txt} 56{com}.                         
+.                         else {c -(}
+{txt} 57{com}.                                 display as error "Warning: OLS failed on rep `i' reg `j'"
+{txt} 58{com}.                         {c )-}
+{txt} 59{com}.                         
+.                         local ++j
+{txt} 60{com}.                 {c )-}
+{txt} 61{com}.         {c )-}
+{txt} 62{com}.         
+.     restore
+{txt} 63{com}.     if mod(`i', `Progress') == 0 display as text "First matrix: Completed rep `i' of `Reps'"
+{txt} 64{com}. {c )-}
+{txt}First matrix: Completed rep 50 of 500
+First matrix: Completed rep 100 of 500
+First matrix: Completed rep 150 of 500
+First matrix: Completed rep 200 of 500
+First matrix: Completed rep 250 of 500
+First matrix: Completed rep 300 of 500
+First matrix: Completed rep 350 of 500
+First matrix: Completed rep 400 of 500
+First matrix: Completed rep 450 of 500
+First matrix: Completed rep 500 of 500
+
+{com}. 
+. if `CoYFlag' == 0 {c -(}
+.         matrix colnames ImpCoefs1 = QBAVCoef RBFBAVCoef WRAVCoef TEAVCoef LTAVCoef GAVCoef CAVCoef RTAVCoef DEAVCoef DTAVCoef ILBAVCoef OLBAVCoef CBAVCoef FSAVCoef SSAVCoef KAVCoef PAVCoef LSAVCoef WinTotalCoef MissWinTotalCoef SeasonPost2021Coef
+. {c )-}
+{txt}
+{com}. else if `CoYFlag' == 1 {c -(}
+.         matrix colnames ImpCoefs1 = QBAVCoef RBFBAVCoef WRAVCoef TEAVCoef LTAVCoef GAVCoef CAVCoef RTAVCoef DEAVCoef DTAVCoef ILBAVCoef OLBAVCoef CBAVCoef FSAVCoef SSAVCoef KAVCoef PAVCoef LSAVCoef WinTotalCoef MissWinTotalCoef SeasonPost2021Coef CoYCoef
+. {c )-}
+{txt}
+{com}. matrix PosImpCoefs1 = ImpCoefs1[1..rowsof(ImpCoefs1), 1..18]
+{txt}
+{com}. matrix colnames PosImpCoefs1 = QBAVCoef RBFBAVCoef WRAVCoef TEAVCoef LTAVCoef GAVCoef CAVCoef RTAVCoef DEAVCoef DTAVCoef ILBAVCoef OLBAVCoef CBAVCoef FSAVCoef SSAVCoef KAVCoef PAVCoef LSAVCoef
+{txt}
+{com}. 
+. matrix colnames CECoefs1 = RookQB RookRBFB RookWR RookTE RookLT RookG RookC RookRT RookDE RookDT RookILB RookOLB RookCB RookFS RookSS RookK RookP RookLS VetQB VetRBFB VetWR VetTE VetLT VetG VetC VetRT VetDE VetDT VetILB VetOLB VetCB VetFS VetSS VetK VetP VetLS
+{txt}
+{com}. matrix RookCECoefs1 = CECoefs1[1..rowsof(CECoefs1), 1..18]
+{txt}
+{com}. matrix VetCECoefs1 = CECoefs1[1..rowsof(CECoefs1), 19..36]
+{txt}
+{com}. matrix colnames RookCECoefs1 = RookQB RookRBFB RookWR RookTE RookLT RookG RookC RookRT RookDE RookDT RookILB RookOLB RookCB RookFS RookSS RookK RookP RookLS
+{txt}
+{com}. matrix colnames VetCECoefs1 = VetQB VetRBFB VetWR VetTE VetLT VetG VetC VetRT VetDE VetDT VetILB VetOLB VetCB VetFS VetSS VetK VetP VetLS
+{txt}
+{com}. 
+. * Calculate optimal allocations: Sqrt spec -> square the products
+. foreach c in Rook Vet {c -(}
+{txt}  2{com}.         matrix `c'Denom1 = J(`Reps', 1, .)
+{txt}  3{com}.         foreach x in QB RBFB WR TE LT G C RT DE DT ILB OLB CB FS SS K P LS {c -(}
+{txt}  4{com}.                 matrix `c'`x'1 = J(`Reps', 1, .)
+{txt}  5{com}.         {c )-}
+{txt}  6{com}. 
+.         forvalues i = 1/`Reps' {c -(}
+{txt}  7{com}.                 scalar __den = 0
+{txt}  8{com}.                 local j = 1
+{txt}  9{com}. 
+.                 * Pass 1: store squared numerators and accumulate denominator
+.                 foreach x in QB RBFB WR TE LT G C RT DE DT ILB OLB CB FS SS K P LS {c -(}
+{txt} 10{com}.                         scalar __num = PosImpCoefs1[`i',`j'] * `c'CECoefs1[`i',`j']
+{txt} 11{com}.                         scalar __num2 = __num^2
+{txt} 12{com}.                         matrix `c'`x'1[`i',1] = __num2
+{txt} 13{com}.                         scalar __den = __den + __num2
+{txt} 14{com}.                         local ++j
+{txt} 15{com}.                 {c )-}
+{txt} 16{com}. 
+.                 * Guard against degenerate case (all zeros)
+.                 if (__den<=0) {c -(}
+{txt} 17{com}.                         * split mass evenly to avoid missing values; tweak if you prefer zeros
+.                         foreach x in QB RBFB WR TE LT G C RT DE DT ILB OLB CB FS SS K P LS {c -(}
+{txt} 18{com}.                                 matrix `c'`x'1[`i',1] = 1/18
+{txt} 19{com}.                         {c )-}
+{txt} 20{com}.                         matrix `c'Denom1[`i',1] = 0
+{txt} 21{com}.                 {c )-}
+{txt} 22{com}.                 else {c -(}
+{txt} 23{com}.                         * Pass 2: normalize
+.                         foreach x in QB RBFB WR TE LT G C RT DE DT ILB OLB CB FS SS K P LS {c -(}
+{txt} 24{com}.                                 matrix `c'`x'1[`i',1] = `c'`x'1[`i',1] / __den
+{txt} 25{com}.                         {c )-}
+{txt} 26{com}.                         matrix `c'Denom1[`i',1] = __den
+{txt} 27{com}.                 {c )-}
+{txt} 28{com}.         {c )-}
+{txt} 29{com}. {c )-}
+{txt}
+{com}. matrix Opt1 = [RookQB1, RookRBFB1, RookWR1, RookTE1, RookLT1, RookG1, RookC1, RookRT1, RookDE1, RookDT1, RookILB1, RookOLB1, RookCB1, RookFS1, RookSS1, RookK1, RookP1, RookLS1, ///
+> VetQB1, VetRBFB1, VetWR1, VetTE1, VetLT1, VetG1, VetC1, VetRT1, VetDE1, VetDT1, VetILB1, VetOLB1, VetCB1, VetFS1, VetSS1, VetK1, VetP1, VetLS1]
+{txt}
+{com}. matrix colnames Opt1 = RookQB RookRBFB RookWR RookTE RookLT RookG RookC RookRT RookDE RookDT RookILB RookOLB RookCB RookFS RookSS RookK RookP RookLS ///
+> VetQB VetRBFB VetWR VetTE VetLT VetG VetC VetRT VetDE VetDT VetILB VetOLB VetCB VetFS VetSS VetK VetP VetLS
+{txt}
+{com}. 
+. matrix ImpCoefsOpt1 = [ImpCoefs1, Opt1]
+{txt}
+{com}. if `CoYFlag' == 0 {c -(}
+.         matrix colnames ImpCoefsOpt1 = QBAVCoef RBFBAVCoef WRAVCoef TEAVCoef LTAVCoef GAVCoef CAVCoef RTAVCoef DEAVCoef DTAVCoef ILBAVCoef OLBAVCoef CBAVCoef FSAVCoef SSAVCoef KAVCoef PAVCoef LSAVCoef WinTotalCoef MissWinTotalCoef SeasonPost2021Coef ///
+> RookQB RookRBFB RookWR RookTE RookLT RookG RookC RookRT RookDE RookDT RookILB RookOLB RookCB RookFS RookSS RookK RookP RookLS ///
+> VetQB VetRBFB VetWR VetTE VetLT VetG VetC VetRT VetDE VetDT VetILB VetOLB VetCB VetFS VetSS VetK VetP VetLS
+. {c )-}
+{txt}
+{com}. else if `CoYFlag' == 1 {c -(}
+.         matrix colnames ImpCoefsOpt1 = QBAVCoef RBFBAVCoef WRAVCoef TEAVCoef LTAVCoef GAVCoef CAVCoef RTAVCoef DEAVCoef DTAVCoef ILBAVCoef OLBAVCoef CBAVCoef FSAVCoef SSAVCoef KAVCoef PAVCoef LSAVCoef WinTotalCoef MissWinTotalCoef SeasonPost2021Coef CoYCoef ///
+> RookQB RookRBFB RookWR RookTE RookLT RookG RookC RookRT RookDE RookDT RookILB RookOLB RookCB RookFS RookSS RookK RookP RookLS ///
+> VetQB VetRBFB VetWR VetTE VetLT VetG VetC VetRT VetDE VetDT VetILB VetOLB VetCB VetFS VetSS VetK VetP VetLS
+. {c )-}
+{txt}
+{com}. 
+. * Second half
+. matrix ImpCoefs2 = J(`Reps', `End', .)
+{txt}
+{com}. matrix CECoefs2 = J(`Reps', 36, .)
+{txt}
+{com}. 
+. forvalues i = 1/`Reps' {c -(}
+{txt}  2{com}.     preserve
+{txt}  3{com}.     bsample, cluster(FE)
+{txt}  4{com}.         
+.         * Importance regression
+.         local AvgConst2 = AvgConst2[`i',1]
+{txt}  5{com}.         capture {c -(}
+{txt}  6{com}.                 if `CoYFlag' == 0 {c -(}
+{txt}  7{com}.                         nl (wins=`AvgConst2'*QBAV+exp({c -(}lnb2{c )-})*RBFBAV+exp({c -(}lnb3{c )-})*WRAV+exp({c -(}lnb4{c )-})*TEAV+exp({c -(}lnb5{c )-})*LTAV+exp({c -(}lnb6{c )-})*GAV+exp({c -(}lnb7{c )-})*CAV+exp({c -(}lnb8{c )-})*RTAV+exp({c -(}lnb9{c )-})*DEAV+exp({c -(}lnb10{c )-})*DTAV+exp({c -(}lnb11{c )-})*ILBAV+exp({c -(}lnb12{c )-})*OLBAV+exp({c -(}lnb13{c )-})*CBAV+exp({c -(}lnb14{c )-})*FSAV+exp({c -(}lnb15{c )-})*SSAV+exp({c -(}lnb16{c )-})*KAV+exp({c -(}lnb17{c )-})*PAV+exp({c -(}lnb18{c )-})*LSAV+{c -(}a1{c )-}*WinTotal+{c -(}a2{c )-}*MissWinTotal+{c -(}a3{c )-}*SeasonPost2021+{c -(}i2{c )-}*FE2+{c -(}i3{c )-}*FE3+{c -(}i4{c )-}*FE4+{c -(}i5{c )-}*FE5+{c -(}i6{c )-}*FE6+{c -(}i7{c )-}*FE7+{c -(}i8{c )-}*FE8+{c -(}i9{c )-}*FE9+{c -(}i10{c )-}*FE10+{c -(}i11{c )-}*FE11+{c -(}i12{c )-}*FE12+{c -(}i13{c )-}*FE13+{c -(}i14{c )-}*FE14+{c -(}i15{c )-}*FE15+{c -(}i16{c )-}*FE16+{c -(}i17{c )-}*FE17+{c -(}i18{c )-}*FE18+{c -(}i19{c )-}*FE19+{c -(}i20{c )-}*FE20+{c -(}i21{c )-}*FE21+{c -(}i22{c )-}*FE22+{c -(}i23{c )-}*FE23+{c -(}i24{c )-}*FE24+{c -(}i25{c )-}*FE25+{c -(}i26{c )-}*FE26+{c -(}i27{c )-}*FE27+{c -(}i28{c )-}*FE28+{c -(}i29{c )-}*FE29+{c -(}i30{c )-}*FE30+{c -(}i31{c )-}*FE31+{c -(}i32{c )-}*FE32+{c -(}b0{c )-}), vce(cluster FE)
+{txt}  8{com}.                 {c )-}
+{txt}  9{com}.                 else if `CoYFlag' == 1 {c -(}
+{txt} 10{com}.                         nl (wins=`AvgConst2'*QBAV+exp({c -(}lnb2{c )-})*RBFBAV+exp({c -(}lnb3{c )-})*WRAV+exp({c -(}lnb4{c )-})*TEAV+exp({c -(}lnb5{c )-})*LTAV+exp({c -(}lnb6{c )-})*GAV+exp({c -(}lnb7{c )-})*CAV+exp({c -(}lnb8{c )-})*RTAV+exp({c -(}lnb9{c )-})*DEAV+exp({c -(}lnb10{c )-})*DTAV+exp({c -(}lnb11{c )-})*ILBAV+exp({c -(}lnb12{c )-})*OLBAV+exp({c -(}lnb13{c )-})*CBAV+exp({c -(}lnb14{c )-})*FSAV+exp({c -(}lnb15{c )-})*SSAV+exp({c -(}lnb16{c )-})*KAV+exp({c -(}lnb17{c )-})*PAV+exp({c -(}lnb18{c )-})*LSAV+{c -(}a1{c )-}*WinTotal+{c -(}a2{c )-}*MissWinTotal+{c -(}a3{c )-}*SeasonPost2021+{c -(}a4{c )-}*CoY+{c -(}i2{c )-}*FE2+{c -(}i3{c )-}*FE3+{c -(}i4{c )-}*FE4+{c -(}i5{c )-}*FE5+{c -(}i6{c )-}*FE6+{c -(}i7{c )-}*FE7+{c -(}i8{c )-}*FE8+{c -(}i9{c )-}*FE9+{c -(}i10{c )-}*FE10+{c -(}i11{c )-}*FE11+{c -(}i12{c )-}*FE12+{c -(}i13{c )-}*FE13+{c -(}i14{c )-}*FE14+{c -(}i15{c )-}*FE15+{c -(}i16{c )-}*FE16+{c -(}i17{c )-}*FE17+{c -(}i18{c )-}*FE18+{c -(}i19{c )-}*FE19+{c -(}i20{c )-}*FE20+{c -(}i21{c )-}*FE21+{c -(}i22{c )-}*FE22+{c -(}i23{c )-}*FE23+{c -(}i24{c )-}*FE24+{c -(}i25{c )-}*FE25+{c -(}i26{c )-}*FE26+{c -(}i27{c )-}*FE27+{c -(}i28{c )-}*FE28+{c -(}i29{c )-}*FE29+{c -(}i30{c )-}*FE30+{c -(}i31{c )-}*FE31+{c -(}i32{c )-}*FE32+{c -(}b0{c )-}), vce(cluster FE)
+{txt} 11{com}.                 {c )-}
+{txt} 12{com}.         {c )-}
+{txt} 13{com}. 
+.         if _rc == 0 {c -(}
+{txt} 14{com}.                 matrix Const = e(b)
+{txt} 15{com}.                 if c(version) >= 19 {c -(}
+{txt} 16{com}.                         matrix Constlnb2lnb9 = Const[1,45+`CoYFlag'..52+`CoYFlag']
+{txt} 17{com}.                         matrix Constlnb10lnb18 = Const[1,36+`CoYFlag'..44+`CoYFlag']
+{txt} 18{com}.                         matrix Consta = Const[1,1..3+`CoYFlag']
+{txt} 19{com}.                         matrix Consti2 = Const[1,15+`CoYFlag']
+{txt} 20{com}.                         matrix Consti3 = Const[1,26+`CoYFlag']
+{txt} 21{com}.                         matrix Consti4i9 = Const[1,30+`CoYFlag'..35+`CoYFlag']
+{txt} 22{com}.                         matrix Consti10i19 = Const[1,5+`CoYFlag'..14+`CoYFlag']
+{txt} 23{com}.                         matrix Consti20i29 = Const[1,16+`CoYFlag'..25+`CoYFlag']
+{txt} 24{com}.                         matrix Consti30i32 = Const[1,27+`CoYFlag'..29+`CoYFlag']
+{txt} 25{com}.                         matrix Constb0 = Const[1,4+`CoYFlag']
+{txt} 26{com}.                         matrix Const = (Constlnb2lnb9, Constlnb10lnb18, Consta, Consti2, Consti3, Consti4i9, Consti10i19, Consti20i29, Consti30i32, Constb0)
+{txt} 27{com}.                         matrix drop Constlnb2lnb9 Constlnb10lnb18 Consta Consti2 Consti3 Consti4i9 Consti10i19 Consti20i29 Consti30i32 Constb0
+{txt} 28{com}.                 {c )-}
+{txt} 29{com}.                 
+.                 forvalues j = 2/18 {c -(}
+{txt} 30{com}.                         if c(version) < 19 {c -(}
+{txt} 31{com}.                                 quietly nlcom b`j': exp(_b[lnb`j':_cons])
+{txt} 32{com}.                         {c )-}
+{txt} 33{com}.                         else {c -(}
+{txt} 34{com}.                                 quietly nlcom b`j': exp(_b[lnb`j'])
+{txt} 35{com}.                         {c )-}
+{txt} 36{com}.                         quietly matrix Const[1,`j'-1] = r(b)
+{txt} 37{com}.                 {c )-}
+{txt} 38{com}.                 
+.                 matrix ImpCoefs2[`i',1] = AvgConst2[`i',1]
+{txt} 39{com}.                 forvalues j = 2/`End' {c -(}
+{txt} 40{com}.                         matrix ImpCoefs2[`i',`j'] = Const[1,`j'-1]
+{txt} 41{com}.                 {c )-}
+{txt} 42{com}.         {c )-}
+{txt} 43{com}.         
+.         else {c -(}
+{txt} 44{com}.                 display as error "Warning: NLS failed on rep `i'"
+{txt} 45{com}.         {c )-}
+{txt} 46{com}.         
+.         * Cost effectiveness regressions
+.         local j = 1
+{txt} 47{com}.         foreach c in Rook Vet {c -(}
+{txt} 48{com}.                 foreach x in QB RBFB WR TE LT G C RT DE DT ILB OLB CB FS SS K P LS {c -(}
+{txt} 49{com}.                         capture {c -(}
+{txt} 50{com}.                                 reg `c'`x'AV Sqrt`c'`x'CapPct, vce(cluster FE)
+{txt} 51{com}.                         {c )-}
+{txt} 52{com}.                         
+.                         if _rc == 0 {c -(}
+{txt} 53{com}.                                 matrix Coefs`j' = e(b)
+{txt} 54{com}.                                 matrix CECoefs2[`i',`j'] = Coefs`j'[1,1]
+{txt} 55{com}.                         {c )-}
+{txt} 56{com}.                         
+.                         else {c -(}
+{txt} 57{com}.                                 display as error "Warning: OLS failed on rep `i' reg `j'"
+{txt} 58{com}.                         {c )-}
+{txt} 59{com}.                         
+.                         local ++j
+{txt} 60{com}.                 {c )-}
+{txt} 61{com}.         {c )-}
+{txt} 62{com}.         
+.     restore
+{txt} 63{com}.     if mod(`i', `Progress') == 0 display as text "Second matrix: Completed rep `i' of `Reps'"
+{txt} 64{com}. {c )-}
+{txt}Second matrix: Completed rep 50 of 500
+Second matrix: Completed rep 100 of 500
+Second matrix: Completed rep 150 of 500
+Second matrix: Completed rep 200 of 500
+Second matrix: Completed rep 250 of 500
+Second matrix: Completed rep 300 of 500
+Second matrix: Completed rep 350 of 500
+Second matrix: Completed rep 400 of 500
+Second matrix: Completed rep 450 of 500
+Second matrix: Completed rep 500 of 500
+
+{com}. 
+. if `CoYFlag' == 0 {c -(}
+.         matrix colnames ImpCoefs2 = QBAVCoef RBFBAVCoef WRAVCoef TEAVCoef LTAVCoef GAVCoef CAVCoef RTAVCoef DEAVCoef DTAVCoef ILBAVCoef OLBAVCoef CBAVCoef FSAVCoef SSAVCoef KAVCoef PAVCoef LSAVCoef WinTotalCoef MissWinTotalCoef SeasonPost2021Coef
+. {c )-}
+{txt}
+{com}. else if `CoYFlag' == 1 {c -(}
+.         matrix colnames ImpCoefs2 = QBAVCoef RBFBAVCoef WRAVCoef TEAVCoef LTAVCoef GAVCoef CAVCoef RTAVCoef DEAVCoef DTAVCoef ILBAVCoef OLBAVCoef CBAVCoef FSAVCoef SSAVCoef KAVCoef PAVCoef LSAVCoef WinTotalCoef MissWinTotalCoef SeasonPost2021Coef CoYCoef
+. {c )-}
+{txt}
+{com}. matrix PosImpCoefs2 = ImpCoefs2[1..rowsof(ImpCoefs1), 1..18]
+{txt}
+{com}. matrix colnames PosImpCoefs2 = QBAVCoef RBFBAVCoef WRAVCoef TEAVCoef LTAVCoef GAVCoef CAVCoef RTAVCoef DEAVCoef DTAVCoef ILBAVCoef OLBAVCoef CBAVCoef FSAVCoef SSAVCoef KAVCoef PAVCoef LSAVCoef
+{txt}
+{com}. 
+. matrix colnames CECoefs2 = RookQB RookRBFB RookWR RookTE RookLT RookG RookC RookRT RookDE RookDT RookILB RookOLB RookCB RookFS RookSS RookK RookP RookLS VetQB VetRBFB VetWR VetTE VetLT VetG VetC VetRT VetDE VetDT VetILB VetOLB VetCB VetFS VetSS VetK VetP VetLS
+{txt}
+{com}. matrix RookCECoefs2 = CECoefs2[1..rowsof(CECoefs1), 1..18]
+{txt}
+{com}. matrix VetCECoefs2 = CECoefs2[1..rowsof(CECoefs1), 19..36]
+{txt}
+{com}. matrix colnames RookCECoefs2 = RookQB RookRBFB RookWR RookTE RookLT RookG RookC RookRT RookDE RookDT RookILB RookOLB RookCB RookFS RookSS RookK RookP RookLS
+{txt}
+{com}. matrix colnames VetCECoefs2 = VetQB VetRBFB VetWR VetTE VetLT VetG VetC VetRT VetDE VetDT VetILB VetOLB VetCB VetFS VetSS VetK VetP VetLS
+{txt}
+{com}. 
+. * Calculate optimal allocations: Sqrt spec -> square the products
+. foreach c in Rook Vet {c -(}
+{txt}  2{com}.         matrix `c'Denom2 = J(`Reps', 1, .)
+{txt}  3{com}.         foreach x in QB RBFB WR TE LT G C RT DE DT ILB OLB CB FS SS K P LS {c -(}
+{txt}  4{com}.                 matrix `c'`x'2 = J(`Reps', 1, .)
+{txt}  5{com}.         {c )-}
+{txt}  6{com}. 
+.         forvalues i = 1/`Reps' {c -(}
+{txt}  7{com}.                 scalar __den = 0
+{txt}  8{com}.                 local j = 1
+{txt}  9{com}. 
+.                 * Pass 1: store squared numerators and accumulate denominator
+.                 foreach x in QB RBFB WR TE LT G C RT DE DT ILB OLB CB FS SS K P LS {c -(}
+{txt} 10{com}.                         scalar __num  = PosImpCoefs2[`i',`j'] * `c'CECoefs2[`i',`j']
+{txt} 11{com}.                         scalar __num2 = __num^2
+{txt} 12{com}.                         matrix `c'`x'2[`i',1] = __num2
+{txt} 13{com}.                         scalar __den = __den + __num2
+{txt} 14{com}.                         local ++j
+{txt} 15{com}.                 {c )-}
+{txt} 16{com}. 
+.                 * Guard against degenerate case (all zeros)
+.                 if (__den<=0) {c -(}
+{txt} 17{com}.                         foreach x in QB RBFB WR TE LT G C RT DE DT ILB OLB CB FS SS K P LS {c -(}
+{txt} 18{com}.                                 matrix `c'`x'2[`i',1] = 1/18
+{txt} 19{com}.                         {c )-}
+{txt} 20{com}.                         matrix `c'Denom2[`i',1] = 0
+{txt} 21{com}.                 {c )-}
+{txt} 22{com}.                 else {c -(}
+{txt} 23{com}.                         * Pass 2: normalize
+.                         foreach x in QB RBFB WR TE LT G C RT DE DT ILB OLB CB FS SS K P LS {c -(}
+{txt} 24{com}.                                 matrix `c'`x'2[`i',1] = `c'`x'2[`i',1] / __den
+{txt} 25{com}.                         {c )-}
+{txt} 26{com}.                         matrix `c'Denom2[`i',1] = __den
+{txt} 27{com}.                 {c )-}
+{txt} 28{com}.         {c )-}
+{txt} 29{com}. {c )-}
+{txt}
+{com}. matrix Opt2 = [RookQB2, RookRBFB2, RookWR2, RookTE2, RookLT2, RookG2, RookC2, RookRT2, RookDE2, RookDT2, RookILB2, RookOLB2, RookCB2, RookFS2, RookSS2, RookK2, RookP2, RookLS2, ///
+> VetQB2, VetRBFB2, VetWR2, VetTE2, VetLT2, VetG2, VetC2, VetRT2, VetDE2, VetDT2, VetILB2, VetOLB2, VetCB2, VetFS2, VetSS2, VetK2, VetP2, VetLS2]
+{txt}
+{com}. matrix colnames Opt2 = RookQB RookRBFB RookWR RookTE RookLT RookG RookC RookRT RookDE RookDT RookILB RookOLB RookCB RookFS RookSS RookK RookP RookLS ///
+> VetQB VetRBFB VetWR VetTE VetLT VetG VetC VetRT VetDE VetDT VetILB VetOLB VetCB VetFS VetSS VetK VetP VetLS
+{txt}
+{com}. 
+. matrix ImpCoefsOpt2 = [ImpCoefs2, Opt2]
+{txt}
+{com}. if `CoYFlag' == 0 {c -(}
+.         matrix colnames ImpCoefsOpt2 = QBAVCoef RBFBAVCoef WRAVCoef TEAVCoef LTAVCoef GAVCoef CAVCoef RTAVCoef DEAVCoef DTAVCoef ILBAVCoef OLBAVCoef CBAVCoef FSAVCoef SSAVCoef KAVCoef PAVCoef LSAVCoef WinTotalCoef MissWinTotalCoef SeasonPost2021Coef ///
+> RookQB RookRBFB RookWR RookTE RookLT RookG RookC RookRT RookDE RookDT RookILB RookOLB RookCB RookFS RookSS RookK RookP RookLS ///
+> VetQB VetRBFB VetWR VetTE VetLT VetG VetC VetRT VetDE VetDT VetILB VetOLB VetCB VetFS VetSS VetK VetP VetLS
+. {c )-}
+{txt}
+{com}. else if `CoYFlag' == 1 {c -(}
+.         matrix colnames ImpCoefsOpt2 = QBAVCoef RBFBAVCoef WRAVCoef TEAVCoef LTAVCoef GAVCoef CAVCoef RTAVCoef DEAVCoef DTAVCoef ILBAVCoef OLBAVCoef CBAVCoef FSAVCoef SSAVCoef KAVCoef PAVCoef LSAVCoef WinTotalCoef MissWinTotalCoef SeasonPost2021Coef CoYCoef ///
+> RookQB RookRBFB RookWR RookTE RookLT RookG RookC RookRT RookDE RookDT RookILB RookOLB RookCB RookFS RookSS RookK RookP RookLS ///
+> VetQB VetRBFB VetWR VetTE VetLT VetG VetC VetRT VetDE VetDT VetILB VetOLB VetCB VetFS VetSS VetK VetP VetLS
+. {c )-}
+{txt}
+{com}. 
+. * Convert and save ImpCoefsOpt1
+. drop _all
+{txt}
+{com}. svmat ImpCoefsOpt1, names(col)
+{txt}number of observations will be reset to 500
+Press any key to continue, or Break to abort
+{p}
+Number of observations ({bf:_N}) was 0,
+now 500.
+{p_end}
+
+{com}. gen rep = _n
+{txt}
+{com}. tempfile boot1
+{txt}
+{com}. save `boot1', replace
+{txt}{p 0 4 2}
+(file {bf}
+C:\Users\Owner\AppData\Local\Temp\ST_f10_0000th.tmp{rm}
+not found)
+{p_end}
+{p 0 4 2}
+file {bf}
+C:\Users\Owner\AppData\Local\Temp\ST_f10_0000th.tmp{rm}
+saved
+as .dta format
+{p_end}
+
+{com}. 
+. * Clear memory to prepare for second matrix
+. clear
+{txt}
+{com}. 
+. * Convert and save ImpCoefsOpt2
+. svmat ImpCoefsOpt2, names(col)
+{txt}number of observations will be reset to 500
+Press any key to continue, or Break to abort
+{p}
+Number of observations ({bf:_N}) was 0,
+now 500.
+{p_end}
+
+{com}. gen rep = _n + `Reps'
+{txt}
+{com}. tempfile boot2
+{txt}
+{com}. save `boot2', replace
+{txt}{p 0 4 2}
+(file {bf}
+C:\Users\Owner\AppData\Local\Temp\ST_f10_0000ti.tmp{rm}
+not found)
+{p_end}
+{p 0 4 2}
+file {bf}
+C:\Users\Owner\AppData\Local\Temp\ST_f10_0000ti.tmp{rm}
+saved
+as .dta format
+{p_end}
+
+{com}. 
+. * Append and save final combined dataset
+. use `boot1', clear
+{txt}
+{com}. append using `boot2'
+{txt}
+{com}. replace MissWinTotalCoef = . if MissWinTotalCoef == 0
+{txt}(342 real changes made, 342 to missing)
+
+{com}. replace SeasonPost2021Coef = . if SeasonPost2021Coef == 0
+{txt}(0 real changes made)
+
+{com}. drop rep
+{txt}
+{com}. 
+. * NLS standard errors
+. if `CoYFlag' == 0 {c -(}
+.         local i = 1
+.         foreach x in QBAVCoef RBFBAVCoef WRAVCoef TEAVCoef LTAVCoef GAVCoef CAVCoef RTAVCoef DEAVCoef DTAVCoef ILBAVCoef OLBAVCoef CBAVCoef FSAVCoef SSAVCoef KAVCoef PAVCoef LSAVCoef WinTotalCoef MissWinTotalCoef SeasonPost2021Coef {c -(}
+{txt}  2{com}.                 quietly sum `x'
+{txt}  3{com}.                 scalar SE`i' = r(sd)
+{txt}  4{com}.                 local ++i
+{txt}  5{com}.         {c )-}
+.         
+.         matrix SE = [SE1\SE2\SE3\SE4\SE5\SE6\SE7\SE8\SE9\SE10\SE11\SE12\SE13\SE14\SE15\SE16\SE17\SE18\SE19\SE20\SE21]
+.         matrix rownames SE = QBAVSE RBFBAVSE WRAVSE TEAVSE LTAVSE GAVSE CAVSE RTAVSE DEAVSE DTAVSE ILBAVSE OLBAVSE CBAVSE FSAVSE SSAVSE KAVSE PAVSE LSAVSE WinTotalSE MissWinTotalSE SeasonPost2021SE
+.         matrix list SE
+. {c )-}
+{txt}
+{com}. 
+. else if `CoYFlag' == 1 {c -(}
+.         local i = 1
+.         foreach x in QBAVCoef RBFBAVCoef WRAVCoef TEAVCoef LTAVCoef GAVCoef CAVCoef RTAVCoef DEAVCoef DTAVCoef ILBAVCoef OLBAVCoef CBAVCoef FSAVCoef SSAVCoef KAVCoef PAVCoef LSAVCoef WinTotalCoef MissWinTotalCoef SeasonPost2021Coef CoYCoef {c -(}
+{txt}  2{com}.                 quietly sum `x'
+{txt}  3{com}.                 scalar SE`i' = r(sd)
+{txt}  4{com}.                 local ++i
+{txt}  5{com}.         {c )-}
+.         
+.         matrix SE = [SE1\SE2\SE3\SE4\SE5\SE6\SE7\SE8\SE9\SE10\SE11\SE12\SE13\SE14\SE15\SE16\SE17\SE18\SE19\SE20\SE21\SE22]
+.         matrix rownames SE = QBAVSE RBFBAVSE WRAVSE TEAVSE LTAVSE GAVSE CAVSE RTAVSE DEAVSE DTAVSE ILBAVSE OLBAVSE CBAVSE FSAVSE SSAVSE KAVSE PAVSE LSAVSE WinTotalSE MissWinTotalSE SeasonPost2021SE CoYSE
+.         matrix list SE
+{res}
+{txt}SE[22,1]
+                     c1
+      QBAVSE {res} .03636923
+{txt}    RBFBAVSE {res} .02585596
+{txt}      WRAVSE {res} .02223748
+{txt}      TEAVSE {res} .02714894
+{txt}      LTAVSE {res} .02055727
+{txt}       GAVSE {res} .02093694
+{txt}       CAVSE {res} .03455601
+{txt}      RTAVSE {res} .02702282
+{txt}      DEAVSE {res} .01236621
+{txt}      DTAVSE {res} .01220176
+{txt}     ILBAVSE {res} .01450285
+{txt}     OLBAVSE {res} .01301972
+{txt}      CBAVSE {res} .01738285
+{txt}      FSAVSE {res} .02512698
+{txt}      SSAVSE {res}  .0231271
+{txt}       KAVSE {res} .02928386
+{txt}       PAVSE {res}  .0642448
+{txt}      LSAVSE {res} .03415388
+{txt}  WinTotalSE {res} .04052605
+{txt}MissWinTot~E {res} .29144849
+{txt}SeasonPost~E {res} .14470784
+{txt}       CoYSE {res} .24752416
+{reset}{com}. {c )-}
+{txt}
+{com}. 
+. * Confidence intervals
+. matrix RookLB = J(18,1,.)
+{txt}
+{com}. matrix RookUB = J(18,1,.)
+{txt}
+{com}. local i = 1
+{txt}
+{com}. foreach x in RookQB RookRBFB RookWR RookTE RookLT RookG RookC RookRT RookDE RookDT RookILB RookOLB RookCB RookFS RookSS RookK RookP RookLS {c -(}
+{txt}  2{com}.         _pctile `x', p(2.5 97.5)
+{txt}  3{com}.         matrix RookLB[`i',1] = r(r1)
+{txt}  4{com}.         matrix RookUB[`i',1] = r(r2)
+{txt}  5{com}.         local ++i
+{txt}  6{com}. {c )-}
+{txt}
+{com}. 
+. matrix VetLB = J(18,1,.)
+{txt}
+{com}. matrix VetUB = J(18,1,.)
+{txt}
+{com}. local i = 1
+{txt}
+{com}. foreach x in VetQB VetRBFB VetWR VetTE VetLT VetG VetC VetRT VetDE VetDT VetILB VetOLB VetCB VetFS VetSS VetK VetP VetLS {c -(}
+{txt}  2{com}.         _pctile `x', p(2.5 97.5)
+{txt}  3{com}.         matrix VetLB[`i',1] = r(r1)
+{txt}  4{com}.         matrix VetUB[`i',1] = r(r2)
+{txt}  5{com}.         local ++i
+{txt}  6{com}. {c )-}
+{txt}
+{com}. 
+. matrix CI = [RookLB, RookUB, VetLB, VetUB]
+{txt}
+{com}. matrix colnames CI = RookLB RookUB VetLB VetUB
+{txt}
+{com}. matrix rownames CI = QB RBFB WR TE LT G C RT DE DT ILB OLB CB FS SS K P LS
+{txt}
+{com}. matrix list CI
+{res}
+{txt}CI[18,4]
+         RookLB     RookUB      VetLB      VetUB
+  QB {res} .05122166  .33274607  .05368043  .34766231
+{txt}RBFB {res} .01186143  .21313523  .01369165  .18244985
+{txt}  WR {res}  .0341811  .26809561  .02900366  .21078596
+{txt}  TE {res} 1.954e-06   .0435401  3.289e-06  .04853841
+{txt}  LT {res} .00039058  .04413813  .00041136  .04343341
+{txt}   G {res} .00431782  .10053674  .00525283   .1291945
+{txt}   C {res} 1.121e-26  .11350632  9.340e-27  .11208779
+{txt}  RT {res} .00005017  .08966194  .00004428  .08291474
+{txt}  DE {res} .01614086  .09587891  .01923088  .09590103
+{txt}  DT {res} .03119448  .13804553  .02577624  .11529272
+{txt} ILB {res} .02693405  .15134107  .03610155  .15049344
+{txt} OLB {res} .05243441  .15570143  .04375587   .1457827
+{txt}  CB {res} .01741562  .11871447  .02147382  .12040898
+{txt}  FS {res} .01908629  .14311117  .02071277  .15539417
+{txt}  SS {res} .00369388   .0704657  .00413173  .08079874
+{txt}   K {res}         0   .0257198          0   .0145295
+{txt}   P {res}         0  .10285037          0  .07578686
+{txt}  LS {res}         0  .00763239          0  .02109315
+{reset}
+{com}. 
+. save "C:/Users/Owner/OneDrive/Documents/Georgetown University/Thesis Writer/Research/QB Worth/Season Analysis/Data 24 Season Bootstrap Sqrt.dta", replace
+{txt}{p 0 4 2}
+(file {bf}
+C:/Users/Owner/OneDrive/Documents/Georgetown University/Thesis Writer/Research/QB Worth/Season Analysis/Data 24 Season Bootstrap Sqrt.dta{rm}
+not found)
+{p_end}
+{p 0 4 2}
+file {bf}
+C:/Users/Owner/OneDrive/Documents/Georgetown University/Thesis Writer/Research/QB Worth/Season Analysis/Data 24 Season Bootstrap Sqrt.dta{rm}
+saved
+{p_end}
+
+{com}. timer off 1
+{txt}
+{com}. timer list 1
+{res}   1:  18815.08 /        1 =   18815.0850
+{txt}
+{com}. display "Runtime: " r(t1)/60 " minutes"
+{res}Runtime: 313.58475 minutes
+{txt}
+{com}. log close
+      {txt}name:  {res}<unnamed>
+       {txt}log:  {res}C:/Users/Owner/OneDrive/Documents/Georgetown University/Thesis Writer/Research/QB Worth/Season Analysis/Do 13 Season Bootstrap Sqrt.smcl
+  {txt}log type:  {res}smcl
+ {txt}closed on:  {res}11 Sep 2025, 17:44:06
+{txt}{.-}
+{smcl}
+{txt}{sf}{ul off}
